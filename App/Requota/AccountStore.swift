@@ -145,6 +145,13 @@ final class AccountStore: ObservableObject {
         }
         #endif
         #if DEBUG && targetEnvironment(simulator)
+        if SimulatorFixtures.enabled, ProcessInfo.processInfo.arguments.contains("--health-fixture") {
+            if let index = accounts.firstIndex(where: { $0.provider == .claude }) {
+                accounts[index].needsReport = true; accounts[index].issue = UsageError.invalidResponse.localizedDescription
+                accounts[index].snapshot?.updatedAt = .now.addingTimeInterval(-3 * 3600)
+            }
+            if let index = accounts.firstIndex(where: { $0.provider == .codex }) { accounts[index].snapshot?.updatedAt = .now.addingTimeInterval(-7 * 3600) }
+        }
         if SignInUIFixture.enabled, let index = accounts.firstIndex(where: { $0.id == SignInUIFixture.existingID }) {
             accounts[index].snapshot?.identity = SignInUIFixture.credential().registrationIdentity
         }
@@ -345,7 +352,7 @@ final class AccountStore: ObservableObject {
             accounts[index].retainMetricNames()
             accounts[index].snapshot = observe(snapshot, previous: accounts[index].snapshot, id: id); accounts[index].issue = nil; accounts[index].needsLogin = false; accounts[index].needsReport = nil
             observeActivationClock(snapshot, id: id)
-            if integratesWithSystem { Diagnostics.record(.refreshSucceeded, provider: account.provider) }
+            if integratesWithSystem { Diagnostics.$context.withValue(.init(provider: account.provider, accountID: id)) { Diagnostics.record(.refreshSucceeded) } }
             persist()
             if allowsActivation, accounts[index].automaticActivation == true, !activating.contains(id),
                AllowanceActivation.permitted(credential),
@@ -363,7 +370,7 @@ final class AccountStore: ObservableObject {
             if Task.isCancelled || error is CancellationError || (error as? URLError)?.code == .cancelled { return .cancelled }
             guard revisions[id, default: 0] == revision, let index = accounts.firstIndex(where: { $0.id == id }) else { return .skipped }
             accounts[index].issue = error.localizedDescription
-            if integratesWithSystem { Diagnostics.record(.refreshFailed, provider: account.provider, failure: .category(error)) }
+            if integratesWithSystem { Diagnostics.$context.withValue(.init(provider: account.provider, accountID: id)) { Diagnostics.record(.refreshFailed, failure: .category(error)) } }
             if case UsageError.invalidResponse = error {
                 if accounts[index].needsReport != true {
                     accounts[index].needsReport = true; reportAccountID = id

@@ -7,7 +7,7 @@ final class ProviderDetailsTests: XCTestCase {
         XCTAssertEqual(snapshot.windows.count, 1)
         XCTAssertEqual(snapshot.windows[0].usedPercent, 40)
         XCTAssertNotNil(snapshot.windows[0].resetsAt)
-        let badScale = try UsageParser.claude(["seven_day": [:], "extra_usage": ["used_credits": 150, "monthly_limit": 2000, "currency": "GBP", "decimal_places": 20]])
+        let badScale = try UsageParser.claude(["seven_day": ["utilization": 0], "extra_usage": ["used_credits": 150, "monthly_limit": 2000, "currency": "GBP", "decimal_places": 20]])
         XCTAssertNil(badScale.details?.spending.first?.used)
         XCTAssertNil(badScale.details?.spending.first?.limit)
         XCTAssertFalse(badScale.windows.contains { $0.id == "claude-spend" })

@@ -44,7 +44,7 @@ struct LockScreenAccessoryContent: View {
             if let account = entry.account {
                 switch family {
                 case .accessoryCircular:
-                    if !account.needsLogin, let percent = entry.reading?.percent {
+                    if !account.health(at: entry.date).needsAttention, let percent = entry.reading?.percent {
                         GeometryReader { geometry in
                             let diameter = min(geometry.size.width, geometry.size.height)
                             ZStack {
@@ -58,17 +58,17 @@ struct LockScreenAccessoryContent: View {
                         }
                     } else {
                         VStack(spacing: 2) {
-                            Text(entry.compactValue).font(.system(size: 12, weight: .semibold)).monospacedDigit().lineLimit(2).minimumScaleFactor(0.6)
-                            Text(account.needsLogin ? "Sign in" : entry.title).font(.system(size: 9)).lineLimit(1)
+                            Text(account.health(at: entry.date).needsAttention ? "!" : entry.compactValue).font(.system(size: 12, weight: .semibold)).monospacedDigit().lineLimit(2).minimumScaleFactor(0.6)
+                            Text(account.health(at: entry.date).needsAttention ? account.health(at: entry.date).title : entry.title).font(.system(size: 9)).lineLimit(1)
                         }
                     }
                 case .accessoryInline:
-                    Text("\(entry.inlineValue) · \(account.title)").lineLimit(1)
+                    Text("\(account.health(at: entry.date).needsAttention ? "⚠ " + account.health(at: entry.date).title : entry.inlineValue) · \(account.title)").lineLimit(1)
                 default:
                     VStack(alignment: .leading, spacing: 2) {
                         Text(account.title).font(.headline).lineLimit(1)
                         Text(entry.inlineValue).font(.caption).monospacedDigit().lineLimit(1).minimumScaleFactor(0.8)
-                        if account.needsLogin { Text("Sign in to update").font(.caption2) }
+                        if account.health(at: entry.date).needsAttention { Text(account.health(at: entry.date).title).font(.caption2) }
                         else if !account.exhaustedWindows.isEmpty, let balance = account.snapshot?.formattedCreditBalance { Text("Credits: " + balance).font(.caption2).lineLimit(1) }
                         else if let reset = entry.reading?.window?.resetsAt {
                             if reset <= entry.date { Text("Reset due").font(.caption2) }
@@ -79,6 +79,8 @@ struct LockScreenAccessoryContent: View {
                 }
             } else { Text("Choose account").font(.caption) }
         }.widgetAccentable()
-            .accessibilityLabel(entry.account.map { "\($0.title), \(entry.title), \(entry.value)" } ?? "Choose an account in widget settings")
+            .accessibilityLabel(entry.account.map { account in
+                account.title + (account.health(at: entry.date).needsAttention ? ", " + account.health(at: entry.date).title + ", last reading" : "") + ", " + entry.title + ", " + entry.value
+            } ?? "Choose an account in widget settings")
     }
 }

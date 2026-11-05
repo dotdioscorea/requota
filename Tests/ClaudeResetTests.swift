@@ -2,7 +2,7 @@ import XCTest
 @testable import Requota
 
 final class ClaudeResetTests: XCTestCase {
-    let now = Date(timeIntervalSince1970: 1_791_133_200)
+    var now = Date(timeIntervalSince1970: 1_791_133_200)
     func payload(remaining: Int = 1, used: Double = 75, paused: Bool = false, usable: Bool = false) -> [String: Any] {
         ["five_hour": ["utilization": used, "resets_at": now.addingTimeInterval(3600).timeIntervalSince1970],
          "seven_day": ["utilization": used, "resets_at": now.addingTimeInterval(86400).timeIntervalSince1970],
@@ -141,6 +141,7 @@ final class ClaudeResetPersistenceTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         let fixture = ClaudeResetTests()
         let now = Date.now
+        fixture.now = now
         var firstCredential = Fixture.credential("claude-one"); firstCredential.provider = .claude
         firstCredential.issuer = ProviderAuth.issuer(.claude); firstCredential.clientID = ProviderAuth.claudeClientID
         var secondCredential = firstCredential; secondCredential.subject = "claude-two"

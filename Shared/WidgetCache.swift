@@ -19,7 +19,7 @@ enum WidgetCache {
             copy.snapshot?.email = nil
             copy.snapshot?.identity = nil
             copy.snapshot?.details = nil
-            copy.issue = copy.needsLogin ? "Reconnect in Requota" : nil
+            copy.issue = original.issue == nil ? nil : "Usage could not be updated"
             return copy
         }
     }

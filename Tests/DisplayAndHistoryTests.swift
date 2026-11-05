@@ -174,7 +174,7 @@ final class DisplayAndHistoryTests: XCTestCase {
         Diagnostics.record(.refreshCycle, refresh: .init(trigger: .backgroundProcessing, startedAt: .now.addingTimeInterval(-10), finishedAt: .now, summary: summary))
         for _ in 0..<101 { Diagnostics.record(.http, status: 200, endpoint: .usage) }
         let bundle = Diagnostics.bundle(accounts: [])
-        XCTAssertEqual(bundle.schemaVersion, 5)
+        XCTAssertEqual(bundle.schemaVersion, 6)
         XCTAssertFalse(bundle.events.contains(where: { $0.stage == .refreshCycle }))
         XCTAssertEqual(bundle.refresh.lastBackgroundCycle?.trigger, .backgroundProcessing)
         XCTAssertEqual(bundle.refresh.lastBackgroundCycle?.summary, summary)

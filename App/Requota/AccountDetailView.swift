@@ -15,6 +15,7 @@ struct AccountDetailView: View {
             if let account {
                 ScrollView {
                     VStack(spacing: 20) {
+                        AccountHealthBanner(account: account, report: { reporting = true }, configure: { configuring = true })
                         if textSize.isAccessibilitySize { Text(account.title).font(.title2.weight(.semibold)).fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading) }
                         TimelineView(.periodic(from: .now, by: 60)) { context in
                             VStack(spacing: 22) {
@@ -75,7 +76,6 @@ struct AccountDetailView: View {
                         if AllowanceActivation.supported(account.provider), !store.isDemo {
                             ActivationControls(account: account).panel()
                         }
-                        if let issue = account.issue { VStack(alignment: .leading, spacing: 10) { Text(issue).font(.subheadline).foregroundStyle(.orange); if account.needsReport == true { Button("Report problem") { reporting = true } } }.frame(maxWidth: .infinity, alignment: .leading).panel() }
                         VStack(alignment: .leading, spacing: 16) {
                             if !account.workstream.isEmpty { info("Workstream", value: account.workstream) }
                             if let email = account.snapshot?.email { info("Signed in as", value: email) }
