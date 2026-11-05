@@ -24,6 +24,11 @@ final class UsageHealthTests: XCTestCase {
         }
         XCTAssertEqual(try UsageParser.claude(["seven_day": ["utilization": 0]]).windows.first?.safePercent, 0)
     }
+    func testQuotaOvershootRemainsReadableWhileDisplayCapsAtExhausted() throws {
+        let snapshot = try UsageParser.claude(["limits": [["kind": "weekly_all", "group": "weekly", "percent": 100.5]]])
+        XCTAssertEqual(snapshot.windows.first?.usedPercent, 100.5)
+        XCTAssertEqual(snapshot.windows.first?.safePercent, 100)
+    }
     func testHealthImmediatelyShowsFailureAndAgesEvenWithoutRefreshDelivery() throws {
         var account = AgentAccount(provider: .claude, snapshot: UsageSnapshot(windows: [], updatedAt: now))
         XCTAssertEqual(account.health(at: now), .current)
