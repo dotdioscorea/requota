@@ -156,7 +156,7 @@ extension UsageParser {
         var current: [UsageWindow] = []
         for item in rows {
             guard let kind = item["kind"] as? String, let group = item["group"] as? String,
-                  let amount = percent(item["percent"]), amount <= 100, ["weekly", "session"].contains(group) else { throw UsageError.invalidResponse }
+                  let amount = percent(item["percent"]), ["weekly", "session"].contains(group) else { throw UsageError.invalidResponse }
             let scope = item["scope"] as? [String: Any]
             let model = scope?["model"] as? [String: Any], surface = scope?["surface"] as? [String: Any]
             let modelName = safeLabel(model?["display_name"]), surfaceName = safeLabel(surface?["display_name"])
