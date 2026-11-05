@@ -150,10 +150,13 @@ extension UsageParser {
         default: return nil
         }
     }
-    static func claudeScopedWindows(_ object: [String: Any], windows: inout [UsageWindow]) {
-        for item in (object["limits"] as? [[String: Any]] ?? []).prefix(30) {
+    static func claudeScopedWindows(_ object: [String: Any], windows: inout [UsageWindow]) throws {
+        guard let raw = object["limits"], !(raw is NSNull) else { return }
+        guard let rows = raw as? [[String: Any]], rows.count <= 100 else { throw UsageError.invalidResponse }
+        var current: [UsageWindow] = []
+        for item in rows {
             guard let kind = item["kind"] as? String, let group = item["group"] as? String,
-                  let amount = percent(item["percent"]), ["weekly", "session"].contains(group) else { continue }
+                  let amount = percent(item["percent"]), amount <= 100, ["weekly", "session"].contains(group) else { throw UsageError.invalidResponse }
             let scope = item["scope"] as? [String: Any]
             let model = scope?["model"] as? [String: Any], surface = scope?["surface"] as? [String: Any]
             let modelName = safeLabel(model?["display_name"]), surfaceName = safeLabel(surface?["display_name"])
@@ -166,13 +169,15 @@ extension UsageParser {
                 if group == "weekly", surfaceName == nil, ["opus", "sonnet"].contains(known ?? "") { id = "seven_day_" + known! }
                 else { id = "claude-scoped-" + metricKey([kind, group, safeLabel(model?["id"]) ?? modelName ?? "", safeLabel(surface?["id"]) ?? surfaceName ?? ""]) }
                 title = labels.joined(separator: " · ") + (group == "weekly" ? " weekly" : " 5-hour")
-            } else { continue }
-            if let index = windows.firstIndex(where: { $0.id == id }) {
-                if windows[index].usedPercent == nil { windows[index].usedPercent = amount }
-                if windows[index].resetsAt == nil { windows[index].resetsAt = date(item["resets_at"]) }
-                continue
-            }
-            windows.append(UsageWindow(id: id, title: title, usedPercent: amount, resetsAt: date(item["resets_at"]), duration: group == "weekly" ? 604800 : 18000))
+            } else { throw UsageError.invalidResponse }
+            guard !current.contains(where: { $0.id == id }) else { throw UsageError.invalidResponse }
+            if let reset = item["resets_at"], !(reset is NSNull), date(reset) == nil { throw UsageError.invalidResponse }
+            var window = UsageWindow(id: id, title: title, usedPercent: amount, resetsAt: date(item["resets_at"]), duration: group == "weekly" ? 604800 : 18000)
+            window.clockReported = clockReported(item["resets_at"])
+            current.append(window)
         }
+        // The structured list is the current inventory. Legacy fields can be
+        // compatibility placeholders, including meters the plan no longer has.
+        windows = current
     }
 }

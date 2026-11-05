@@ -1,6 +1,41 @@
 import XCTest
 
 final class RequotaUITests: XCTestCase {
+    func testOverdueUsageWarningArrivesWhileAppClosed() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-fixture", "--exit-demo-test", "--health-fixture", "--reset-notification-fixture"]
+        app.launch(); app.tabBars.buttons["Settings"].tap(); app.buttons["notification-settings"].tap()
+        let enabled = app.switches["notifications-enabled"]
+        XCTAssertTrue(enabled.waitForExistence(timeout: 5))
+        if enabled.value as? String != "1" { enabled.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap() }
+        let home = XCUIApplication(bundleIdentifier: "com.apple.springboard")
+        if home.alerts.firstMatch.waitForExistence(timeout: 2), home.alerts.firstMatch.buttons["Allow"].exists { home.alerts.firstMatch.buttons["Allow"].tap() }
+        XCUIDevice.shared.press(.home)
+        home.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.01)).press(forDuration: 0.1, thenDragTo: home.coordinate(withNormalizedOffset: CGVector(dx: 0.1, dy: 0.8)))
+        let warning = home.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "no recent usage update")).firstMatch
+        XCTAssertTrue(warning.waitForExistence(timeout: 10))
+        let group = home.scrollViews.matching(NSPredicate(format: "identifier == %@ AND label CONTAINS %@", "ListCell", "Grouped")).firstMatch
+        if group.exists { group.tap() }
+        attachScreen(home, "Overdue usage warning delivered with app closed")
+        XCUIDevice.shared.press(.home)
+    }
+    func testUsageHealthWarningsInEveryOverviewAndAtTopOfAccount() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-fixture", "--exit-demo-test", "--health-fixture"]
+        app.launch()
+        for layout in ["layout-cards", "compact-mode", "layout-tiles"] {
+            for _ in 0..<10 { if app.buttons[layout].isHittable { break }; app.swipeDown() }
+            app.buttons[layout].tap()
+            let work = app.buttons["account-Work"]
+            reveal(work, in: app)
+            XCTAssertTrue(work.label.contains("Usage unavailable"), "Every account layout identifies the failed connection")
+            attachScreen(app, "Account health — " + layout)
+        }
+        app.buttons["account-Work"].tap()
+        XCTAssertTrue(app.buttons["Report problem"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Last successful update:")).firstMatch.exists)
+        attachScreen(app, "Failure shown above account readings")
+        app.buttons["Report problem"].tap()
+        XCTAssertTrue(app.navigationBars["Report a problem"].waitForExistence(timeout: 5))
+    }
     private func attachScreen(_ app: XCUIApplication, _ name: String) {
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = name; shot.lifetime = .keepAlways; add(shot)
     }

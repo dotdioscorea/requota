@@ -180,7 +180,7 @@ struct CompactWidgetRow: View {
             ProviderLogo(provider: account.provider, color: account.color, size: 12)
             Text(account.title).font(.system(size: 11, weight: .semibold)).lineLimit(1)
             Spacer(minLength: 2)
-            Text(account.needsLogin ? "Reconnect" : account.provider.name).font(.system(size: 8)).foregroundStyle(.secondary).lineLimit(1)
+            Text(account.health(at: date).needsAttention ? "⚠ " + account.health(at: date).title : account.provider.name).font(.system(size: 8)).foregroundStyle(account.health(at: date).needsAttention ? .orange : .secondary).lineLimit(1)
         }
     }
     private var bars: some View {
@@ -227,6 +227,7 @@ struct WidgetEmptyView: View {
 }
 private func accountURL(_ account: AgentAccount) -> URL { URL(string: "requota://account/\(account.id)")! }
 private func widgetStatus(_ account: AgentAccount, at date: Date, readings: [MetricReading]) -> String {
+    if account.health(at: date).needsAttention { return account.health(at: date).title + (account.health(at: date) == .limitsChanged ? " · update display" : " · last reading") }
     if account.needsLogin { return "Reconnect in Requota" }
     if let snapshot = account.snapshot, snapshot.isStale(at: date) { return "Updated \(snapshot.updatedAt.formatted(date: .omitted, time: .shortened)) · stale" }
     if let credit = account.snapshot?.formattedCreditBalance, !account.exhaustedWindows.isEmpty { return "Credits: \(credit) · allowance exhausted" }

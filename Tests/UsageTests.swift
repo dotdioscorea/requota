@@ -27,10 +27,7 @@ final class UsageTests: XCTestCase {
     }
     func testClaudeMissingLimitsRemainMissing() throws {
         let raw: [String: Any] = ["five_hour": ["utilization": NSNull(), "resets_at": NSNull()], "seven_day": NSNull()]
-        let value = try UsageParser.claude(raw)
-        XCTAssertEqual(value.windows.count, 1)
-        XCTAssertNil(value.windows[0].safePercent)
-        XCTAssertNil(value.windows[0].resetsAt)
+        XCTAssertThrowsError(try UsageParser.claude(raw))
         XCTAssertThrowsError(try UsageParser.claude([:]))
         XCTAssertThrowsError(try UsageParser.codex([:]))
     }

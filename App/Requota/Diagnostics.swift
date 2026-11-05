@@ -81,6 +81,7 @@ struct UsageParsingDiagnostic: Codable {
     var calculation: UsageCalculation
     var readings: [DiagnosticReading]
     var resetResponse: ResetResponse?
+    var responseSchema: ResponseSchema?
     enum ResetResponse: String, Codable { case missing, null, parsed, surface, clientVersion, ineligible, invalid }
     enum KnownUsageField: String, Codable, CaseIterable {
         case creditUsagePercent, currentPeriod, periodType, periodStart, periodEnd, isUnifiedBillingUser
@@ -92,7 +93,7 @@ struct UsageParsingDiagnostic: Codable {
         case devinUserStatus, devinPlanStatus, dailyQuotaRemainingPercent, weeklyQuotaRemainingPercent, dailyQuotaResetAtUnix, weeklyQuotaResetAtUnix, overageBalanceMicros, acuConsumed, acuLimit, devinModels
         case credits, spend, modelUsage, additionalRateLimits, extraUsage, scopedLimits, weeklyBreakdown, resetProgram, resetGrants, resetEligibility
     }
-    enum CodingKeys: String, CodingKey { case fields, calculation, readings, resetResponse }
+    enum CodingKeys: String, CodingKey { case fields, calculation, readings, resetResponse, responseSchema }
     init(fields: [KnownUsageField: DiagnosticValueType], calculation: UsageCalculation, readings: [DiagnosticReading]) {
         self.fields = fields; self.calculation = calculation; self.readings = readings
     }
@@ -105,6 +106,7 @@ struct UsageParsingDiagnostic: Codable {
         calculation = try container.decode(UsageCalculation.self, forKey: .calculation)
         readings = try container.decode([DiagnosticReading].self, forKey: .readings)
         resetResponse = try container.decodeIfPresent(ResetResponse.self, forKey: .resetResponse)
+        responseSchema = try container.decodeIfPresent(ResponseSchema.self, forKey: .responseSchema)
     }
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
@@ -112,6 +114,7 @@ struct UsageParsingDiagnostic: Codable {
         try container.encode(calculation, forKey: .calculation)
         try container.encode(readings, forKey: .readings)
         try container.encodeIfPresent(resetResponse, forKey: .resetResponse)
+        try container.encodeIfPresent(responseSchema, forKey: .responseSchema)
     }
     static func type(_ value: Any?) -> DiagnosticValueType {
         guard let value else { return .missing }
@@ -188,6 +191,7 @@ struct UsageParsingDiagnostic: Codable {
             return raw == 0 ? .zeroUsed : raw >= 100 ? .fullUsed : .partialUsed
         }
         var diagnostic = Self(fields: fields, calculation: calculation, readings: readings)
+        if snapshot == nil { diagnostic.responseSchema = .capture(raw) }
         if provider == .claude {
             let program = object["cedar_ember"] as? [String: Any] ?? [:]
             if object["cedar_ember"] == nil { diagnostic.resetResponse = .missing }
@@ -202,7 +206,7 @@ struct UsageParsingDiagnostic: Codable {
     }
 }
 struct DebugBundle: Codable {
-    var schemaVersion = 5
+    var schemaVersion = 6
     var createdAt: Date
     var appVersion: String
     var systemVersion: String
@@ -215,10 +219,13 @@ struct DebugBundle: Codable {
     var refresh: RefreshStatus
     var accounts: [AccountStatus]
     var events: [DiagnosticEvent]
+    var responseFailures: [DiagnosticEvent]?
     struct AccountStatus: Codable {
         var provider: Provider
         var connection: String
         var needsLogin: Bool
+        var health: AccountHealth?
+        var needsReport: Bool?
         var readingAgeSeconds: Int?
         var windowCount: Int
         var configuredMetricCount: Int
@@ -248,13 +255,32 @@ enum Diagnostics {
     @TaskLocal static var context: Context?
     private static let lock = NSLock()
     private static let location = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Eyeballs/diagnostics.json")
+    private static var failureLocation: URL { location.deletingLastPathComponent().appendingPathComponent("response-failures.json") }
+    static func retainedFailures(_ events: [DiagnosticEvent], now: Date = .now) -> [DiagnosticEvent] {
+        var seen = Set<String>()
+        return Array(events.filter { $0.date > now.addingTimeInterval(-30 * 86400) && $0.parsing?.responseSchema != nil }.sorted { $0.date > $1.date }.filter {
+            seen.insert(($0.provider?.rawValue ?? "") + ":" + ($0.connection ?? "") + ":" + ($0.parsing?.responseSchema?.fingerprint ?? "")).inserted
+        }.prefix(20))
+    }
+    private static func failures() -> [DiagnosticEvent] {
+        guard let size = try? failureLocation.resourceValues(forKeys: [.fileSizeKey]).fileSize, size < 500_000,
+              let data = try? Data(contentsOf: failureLocation), let events = try? JSONDecoder().decode([DiagnosticEvent].self, from: data) else { return [] }
+        return retainedFailures(events)
+    }
     // Only typed fields are accepted. Never store URLs, HTTP bodies, error messages,
     // OAuth state, labels, email addresses or credentials. Local UUIDs are
     // retained for correlation and replaced with anonymous aliases in exports.
     static func record(_ stage: DiagnosticStage, provider: Provider? = nil, status: Int? = nil, failure: DiagnosticFailure? = nil, privateSession: Bool? = nil, endpoint: DiagnosticEndpoint? = nil, parsing: UsageParsingDiagnostic? = nil, refresh: RefreshCycleDiagnostic? = nil, resets: ResetComparisonDiagnostic? = nil) {
         lock.lock(); defer { lock.unlock() }
         var events = load().filter { $0.date > Date.now.addingTimeInterval(-7 * 86400) }
-        events.append(DiagnosticEvent(date: .now, provider: provider ?? context?.provider, stage: stage, status: status, endpoint: endpoint, failure: failure, privateSession: privateSession, parsing: parsing, refresh: refresh, connection: context?.accountID.uuidString, resets: resets))
+        let event = DiagnosticEvent(date: .now, provider: provider ?? context?.provider, stage: stage, status: status, endpoint: endpoint, failure: failure, privateSession: privateSession, parsing: parsing, refresh: refresh, connection: context?.accountID.uuidString, resets: resets)
+        if parsing?.responseSchema != nil {
+            let archive = retainedFailures(failures() + [event])
+            try? FileManager.default.createDirectory(at: location.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? JSONEncoder().encode(archive).write(to: failureLocation, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+        }
+        var summary = event; summary.parsing?.responseSchema = nil
+        events.append(summary)
         events = Array(events.suffix(100))
         do {
             try FileManager.default.createDirectory(at: location.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -274,7 +300,7 @@ enum Diagnostics {
         return load().filter { $0.date > Date.now.addingTimeInterval(-7 * 86400) }
     }
     static func clear() {
-        lock.lock(); defer { lock.unlock() }; try? FileManager.default.removeItem(at: location)
+        lock.lock(); defer { lock.unlock() }; try? FileManager.default.removeItem(at: location); try? FileManager.default.removeItem(at: failureLocation)
         for key in ["last-foreground-refresh-cycle", "last-background-refresh-cycle"] { UserDefaults.standard.removeObject(forKey: key) }
         for key in ["refresh-scheduling-app", "refresh-scheduling-widget"] { UserDefaults(suiteName: WidgetCache.group)?.removeObject(forKey: key) }
     }
@@ -287,8 +313,9 @@ enum Diagnostics {
     static func bundle(accounts: [AgentAccount], now: Date = .now) -> DebugBundle {
         var aliases = Dictionary(uniqueKeysWithValues: accounts.enumerated().map { ($0.element.id.uuidString, "account-\($0.offset + 1)") })
         let recordedEvents = events()
+        lock.lock(); let responseFailures = failures(); lock.unlock()
         var unlistedCount = 0
-        for event in recordedEvents {
+        for event in recordedEvents + responseFailures {
             if let connection = event.connection, aliases[connection] == nil {
                 unlistedCount += 1
                 aliases[connection] = "connection-\(unlistedCount)"
@@ -309,7 +336,7 @@ enum Diagnostics {
                                                        appScheduling: RefreshSchedulingDiagnostics.read(widget: false), widgetScheduling: RefreshSchedulingDiagnostics.read(widget: true),
                                                        lastForegroundCycle: lastCycle(background: false), lastBackgroundCycle: lastCycle(background: true)),
                     accounts: accounts.map { account in
-                        DebugBundle.AccountStatus(provider: account.provider, connection: aliases[account.id.uuidString]!, needsLogin: account.needsLogin,
+                        DebugBundle.AccountStatus(provider: account.provider, connection: aliases[account.id.uuidString]!, needsLogin: account.needsLogin, health: account.health(at: now), needsReport: account.needsReport,
                                                   readingAgeSeconds: account.snapshot.map { Int(max(0, min(315_360_000, now.timeIntervalSince($0.updatedAt)))) },
                                                   windowCount: account.snapshot?.windows.count ?? 0,
                                                   configuredMetricCount: account.displaySettings.rings.count,
@@ -323,7 +350,9 @@ enum Diagnostics {
                                                   activationClockReported: account.snapshot.flatMap { AllowanceActivation.weekly($0, provider: account.provider)?.clockReported },
                                                   activationDeadlineInMinutes: account.snapshot.flatMap { AllowanceActivation.weekly($0, provider: account.provider)?.resetsAt }.flatMap { minutes($0.timeIntervalSince(now)) },
                                                   activationClockObservationAgeMinutes: account.activation?.resetObservedAt.flatMap { minutes(now.timeIntervalSince($0)) })
-                    }, events: safeEvents)
+                    }, events: safeEvents, responseFailures: responseFailures.map { event in
+                        var copy = event; copy.connection = event.connection.flatMap { aliases[$0] }; return copy
+                    })
     }
     static var version: String { "\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0") (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"))" }
     private static func minutes(_ seconds: TimeInterval) -> Int? {
@@ -333,6 +362,12 @@ enum Diagnostics {
     static func encode(_ bundle: DebugBundle) throws -> Data {
         let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]; encoder.dateEncodingStrategy = .iso8601
         return try encoder.encode(bundle)
+    }
+    @MainActor static func issueEvidence(accounts: [AgentAccount]) -> String {
+        let bundle = bundle(accounts: accounts)
+        guard let failure = bundle.responseFailures?.first, let schema = failure.parsing?.responseSchema else { return "" }
+        let fields = schema.fields.prefix(40).map { $0.path + ": " + $0.type.rawValue + ($0.discriminator.map { " (\($0))" } ?? "") }.joined(separator: "\n")
+        return "\n\nResponse schema (values removed)\nProvider: \(failure.provider?.name ?? "Unknown")\nFingerprint: \(schema.fingerprint)\n```text\n\(fields)\n```"
     }
     static func export(_ data: Data) throws -> URL {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("RequotaReports")

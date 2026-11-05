@@ -293,8 +293,9 @@ enum UsageParser {
             windows.append(UsageWindow(id: key, title: title, usedPercent: percent(value["utilization"]), resetsAt: date(value["resets_at"]), duration: duration))
             windows[windows.count - 1].clockReported = clockReported(value["resets_at"])
         }
-        claudeScopedWindows(object, windows: &windows)
+        try claudeScopedWindows(object, windows: &windows)
         let details = claudeDetails(object, windows: &windows)
+        guard windows.contains(where: { $0.safePercent != nil }) else { throw UsageError.invalidResponse }
         let inventory = claudeResetInventory(object["cedar_ember"], now: now)
         let banked = inventory.map { availableClaudeResets($0, now: now) }
         return UsageSnapshot(windows: windows, updatedAt: now, bankedResets: banked, details: details, resetInventory: inventory)

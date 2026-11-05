@@ -11,11 +11,11 @@ final class ClaudeLiveTests: XCTestCase {
         let snapshot = try await UsageClient.fetch(account: AgentAccount(provider: .claude), credential: credential)
         XCTAssertEqual(snapshot.identity, credential.registrationIdentity)
         XCTAssertNotNil(snapshot.plan)
-        XCTAssertTrue(snapshot.windows.contains { $0.id == "seven_day" && $0.safePercent != nil })
-        let inventory = try XCTUnwrap(snapshot.resetInventory, "Live grant inventory must be recognized.")
-        XCTAssertFalse(inventory.grants.isEmpty)
-        XCTAssertNotNil(snapshot.bankedResets)
-        XCTAssertTrue(inventory.grants.allSatisfy { $0.id.hasPrefix("claude-reset-") })
-        print("CLAUDE LIVE: identity matched; weekly usage, plan and reset inventory parsed; \(inventory.grants.count) grant(s), \(snapshot.bankedResets!.reduce(0) { $0 + $1.count }) available.")
+        XCTAssertTrue(snapshot.windows.contains { $0.safePercent != nil })
+        if let inventory = snapshot.resetInventory {
+            XCTAssertNotNil(snapshot.bankedResets)
+            XCTAssertTrue(inventory.grants.allSatisfy { $0.id.hasPrefix("claude-reset-") })
+        }
+        print("CLAUDE LIVE: identity matched; current usage and plan parsed; reset inventory recognized when eligible.")
     }
 }

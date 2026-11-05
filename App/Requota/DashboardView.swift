@@ -31,7 +31,7 @@ struct RootView: View {
         .alert("Usage could not be read", isPresented: Binding(get: { store.reportAccountID != nil }, set: { if !$0 { store.reportAccountID = nil } })) {
             Button("Report problem") { failedProvider = store.accounts.first { $0.id == store.reportAccountID }?.provider; store.reportAccountID = nil; reporting = true }
             Button("Not now", role: .cancel) { store.reportAccountID = nil }
-        } message: { Text("The provider response may have changed. Your last usage reading has been kept.") }
+        } message: { Text("Your last reading has been kept. A redacted response schema is included when available.") }
         .sheet(isPresented: $reporting) { NavigationStack { ProblemReportView(title: "\(failedProvider?.name ?? "Provider") usage response could not be parsed", includeDebug: true).toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { reporting = false } } } } }
         .onChange(of: store.notificationAccountID, initial: true) { _, value in
             guard let id = value, store.accounts.contains(where: { $0.id == id }) else { return }
@@ -179,6 +179,7 @@ struct AccountCard: View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
             let readings = account.readings(at: context.date)
             VStack(alignment: .leading, spacing: compact ? 5 : 15) {
+                AccountHealthLabel(account: account, now: context.date)
                 AccessibleStack(spacing: compact ? 6 : 9) {
                     HStack(spacing: 8) {
                         ProviderLogo(provider: account.provider, color: account.color, size: compact ? 16 : 22)
@@ -207,7 +208,7 @@ struct AccountCard: View {
                     if !account.exhaustedWindows.isEmpty { Text(account.exhaustedWindows.map(\.title).joined(separator: ", ") + " allowance exhausted").font(.caption2).foregroundStyle(.orange) }
                 }
                 AccessibleStack(spacing: 8) {
-                    if account.needsLogin { Text("Reconnect to update").foregroundStyle(.orange) }
+                    if account.health(at: context.date).needsAttention { Text(account.health(at: context.date) == .limitsChanged ? "Update display settings" : "Showing last reading").foregroundStyle(.orange) }
                     else if let window = account.displayedResetWindow(for: readings), let reset = window.resetsAt { Text(reset <= context.date ? "\(window.shortTitle) reset due" : "\(window.shortTitle) resets in \(ResetText.relative(reset, now: context.date))").foregroundStyle(.secondary) }
                     if !textSize.isAccessibilitySize { Spacer(minLength: 0) }
                     if let snapshot = account.snapshot {
@@ -215,7 +216,7 @@ struct AccountCard: View {
                     }
                 }.font(.caption2)
             }.padding(compact ? 8 : 18).background(Theme.card, in: RoundedRectangle(cornerRadius: compact ? 9 : 22))
-                .overlay(RoundedRectangle(cornerRadius: compact ? 9 : 22).strokeBorder(Theme.border, lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: compact ? 9 : 22).strokeBorder(account.health(at: context.date).needsAttention ? .orange.opacity(0.7) : Theme.border, lineWidth: 1))
         }
     }
 }
@@ -281,14 +282,14 @@ struct AccountTile: View {
                                 }.font(.caption2)
                             }
                         }
-                        if account.needsLogin { Text("Reconnect").font(.system(size: 10)).foregroundStyle(.orange) }
+                        if account.health(at: context.date).needsAttention { Label(account.health(at: context.date).title, systemImage: "exclamationmark.triangle.fill").font(.system(size: 10, weight: .semibold)).foregroundStyle(.orange).lineLimit(1) }
                         else if let updated = account.snapshot?.updatedAt {
                             Text(UpdatedText.relative(updated, now: context.date)).font(.system(size: 9)).foregroundStyle(.secondary).lineLimit(1)
                         }
                     }
                 }.padding(12).frame(width: geometry.size.width, height: geometry.size.height)
                     .background(Theme.card, in: RoundedRectangle(cornerRadius: 16))
-                    .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Theme.border, lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(account.health(at: context.date).needsAttention ? .orange.opacity(0.7) : Theme.border, lineWidth: 1))
             }
         }.aspectRatio(1, contentMode: .fit)
     }

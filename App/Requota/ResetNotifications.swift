@@ -15,8 +15,10 @@ struct ResetNotificationRules: Codable, Equatable {
     var minimumRemaining = 10
     var bankedExpiryHours = 24
     var parsingFailures = true
+    var staleReadings = true
+    var staleAfterHours = 6
     init() {}
-    enum CodingKeys: String, CodingKey { case enabled, lowAllowance, lowThreshold, sessionReset, allowanceChanges, weeklyReset, earlyReset, bankedChanges, bankedExpiry, allowanceReminder, allowanceHours, minimumRemaining, bankedExpiryHours, parsingFailures }
+    enum CodingKeys: String, CodingKey { case enabled, lowAllowance, lowThreshold, sessionReset, allowanceChanges, weeklyReset, earlyReset, bankedChanges, bankedExpiry, allowanceReminder, allowanceHours, minimumRemaining, bankedExpiryHours, parsingFailures, staleReadings, staleAfterHours }
     init(from decoder: Decoder) throws {
         self.init()
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -34,6 +36,8 @@ struct ResetNotificationRules: Codable, Equatable {
         minimumRemaining = try c.decodeIfPresent(Int.self, forKey: .minimumRemaining) ?? minimumRemaining
         bankedExpiryHours = try c.decodeIfPresent(Int.self, forKey: .bankedExpiryHours) ?? bankedExpiryHours
         parsingFailures = try c.decodeIfPresent(Bool.self, forKey: .parsingFailures) ?? parsingFailures
+        staleReadings = try c.decodeIfPresent(Bool.self, forKey: .staleReadings) ?? staleReadings
+        staleAfterHours = try c.decodeIfPresent(Int.self, forKey: .staleAfterHours) ?? staleAfterHours
     }
     func announces(_ kind: AccountEvent.Kind) -> Bool {
         guard enabled else { return false }
@@ -54,6 +58,20 @@ struct PlannedReminder: Equatable {
     var date: Date
     var title: String
     var body: String
+}
+enum UsageHealthReminderPlan {
+    static func make(accounts: [AgentAccount], rules: ResetNotificationRules, overrides: [String: ResetNotificationRules] = [:], now: Date = .now) -> [PlannedReminder] {
+        accounts.compactMap { account in
+            let rules = overrides[account.provider.rawValue] ?? rules
+            guard rules.enabled, rules.staleReadings, let updated = account.snapshot?.updatedAt else { return nil }
+            let deadline = updated.addingTimeInterval(Double(max(1, min(72, rules.staleAfterHours))) * 3600)
+            let failed = account.issue != nil && account.needsReport != true
+            return PlannedReminder(id: "reminder-\(account.id)-update-health", accountID: account.id,
+                date: failed ? now.addingTimeInterval(3) : max(deadline, now.addingTimeInterval(1)),
+                title: "\(account.title): \(failed ? "usage update failed" : "no recent usage update")",
+                body: "Last successful update: \(updated.formatted(date: .abbreviated, time: .shortened)). Open Requota to check the connection.")
+        }
+    }
 }
 enum ResetReminderPlan {
     static func make(accounts: [AgentAccount], rules: ResetNotificationRules, overrides: [String: ResetNotificationRules] = [:], now: Date = .now) -> [PlannedReminder] {

@@ -9,6 +9,8 @@ struct NotificationDeliveryStatus: Codable {
     var scheduled = 0
     var lowWarnings = 0
     var resetWarnings = 0
+    var healthWarnings: Int?
+    var plannedHealthWarnings: Int?
     var lastChecked: Date?
     var schedulingFailed = false
     var plannedLowWarnings = 0
@@ -26,6 +28,9 @@ enum ReminderLedger {
     static func rearmRecovered(_ ledger: [String: Date], accounts: [AgentAccount], rules: ResetNotificationRules, overrides: [String: ResetNotificationRules], now: Date) -> [String: Date] {
         var ledger = ledger
         for account in accounts {
+            if account.health(at: now) == .current || account.health(at: now) == .limitsChanged {
+                ledger.removeValue(forKey: "reminder-\(account.id)-update-health")
+            }
             let rules = overrides[account.provider.rawValue] ?? rules
             guard let snapshot = account.snapshot, now.timeIntervalSince(snapshot.updatedAt) <= 6 * 3600 else { continue }
             for window in snapshot.windows where window.resetsAt == nil {
@@ -92,6 +97,7 @@ actor NotificationDelivery {
         result.scheduled = pending.filter { $0.identifier.hasPrefix("reminder-") }.count
         result.lowWarnings = pending.filter { $0.identifier.hasSuffix("-low") }.count
         result.resetWarnings = pending.filter { $0.identifier.hasSuffix("-allowance") }.count
+        result.healthWarnings = pending.filter { $0.identifier.hasSuffix("-update-health") }.count
         result.lastChecked = .now; result.save(); return result
     }
     private func apply(accounts: [AgentAccount], rules: ResetNotificationRules, overrides: [String: ResetNotificationRules], enabled: Bool) async {
@@ -102,7 +108,7 @@ actor NotificationDelivery {
         let old = await center.pendingNotificationRequests()
         let settings = await center.notificationSettings()
         let authorized = [.authorized, .provisional, .ephemeral].contains(settings.authorizationStatus)
-        let plan = enabled && authorized ? ResetReminderPlan.make(accounts: accounts, rules: rules, overrides: overrides, now: now) : []
+        let plan = enabled && authorized ? ResetReminderPlan.make(accounts: accounts, rules: rules, overrides: overrides, now: now) + UsageHealthReminderPlan.make(accounts: accounts, rules: rules, overrides: overrides, now: now) : []
         var ledger = UserDefaults.standard.data(forKey: "notification-reminder-ledger").flatMap { try? JSONDecoder().decode([String: Date].self, from: $0) } ?? [:]
         // Removing an account also removes its local notification ledger.
         ledger = ledger.filter { key, _ in accounts.contains { key.hasPrefix("reminder-\($0.id)-") } }
@@ -130,6 +136,7 @@ actor NotificationDelivery {
         var result = await status(); result.schedulingFailed = failed
         result.plannedLowWarnings = plan.filter { $0.id.hasSuffix("-low") }.count
         result.plannedResetWarnings = plan.filter { $0.id.hasSuffix("-allowance") }.count
+        result.plannedHealthWarnings = plan.filter { $0.id.hasSuffix("-update-health") }.count
         result.addedRequests = added; result.suppressedRepeats = suppressed
         if warningScheduled { result.lastWarningScheduled = now }
         result.save()

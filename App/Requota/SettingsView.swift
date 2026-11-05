@@ -79,7 +79,7 @@ struct PrivacyView: View {
                 Text("Removing an account deletes its local tokens and saved data.")
             }
             Section {
-                Text("Diagnostic events record sign-in stages, error categories, HTTP status codes and known usage field types for up to seven days. They exclude credentials and account identities. Nothing is sent automatically.")
+                Text("Diagnostics stay on this device: recent events for seven days and unreadable response schemas for 30 days. Schemas contain field types, without response values or account identities. Nothing is sent automatically.")
                 Button(cleared ? "Diagnostics cleared" : "Clear diagnostics") { Diagnostics.clear(); cleared = true }.disabled(cleared)
             }
             Section {
@@ -131,7 +131,8 @@ struct ProblemReportView: View {
     }
     private func openIssue() {
         var url = URLComponents(string: "https://github.com/dotdioscorea/requota/issues/new")!
-        let body = String(details.prefix(6000)) + "\n\nApp: \(Diagnostics.version)\niOS: \(UIDevice.current.systemVersion)" + (includeDebug ? "\n\nAttach requota-debug.json here." : "")
+        let evidence = includeDebug ? Diagnostics.issueEvidence(accounts: store.accounts) : ""
+        let body = String(details.prefix(6000)) + "\n\nApp: \(Diagnostics.version)\niOS: \(UIDevice.current.systemVersion)" + evidence + (includeDebug ? "\n\nFull debug bundle: requota-debug.json (optional attachment)." : "")
         url.queryItems = [URLQueryItem(name: "title", value: String(title.prefix(160))), URLQueryItem(name: "body", value: body)]
         if let url = url.url { openURL(url) }
     }
@@ -226,7 +227,13 @@ struct NotificationRuleControls: View {
         }
         Section("Account changes") {
             AccessibleToggle("Plan or allowance changes", isOn: $rules.allowanceChanges)
+        }
+        Section("Usage updates") {
             AccessibleToggle("Usage parsing failures", isOn: $rules.parsingFailures)
+            AccessibleToggle("Failed or overdue updates", isOn: $rules.staleReadings)
+            if rules.staleReadings {
+                AccessibleFormPicker("No successful update for", selection: $rules.staleAfterHours, options: [1, 3, 6, 12, 24, 48].map { ("\($0) hours", $0) })
+            }
         }
     }
 }
