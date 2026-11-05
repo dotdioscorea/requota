@@ -1,0 +1,102 @@
+{
+  "product": "Requota",
+  "version": "1.0",
+  "build": "22",
+  "source_commit": "1ee5a4445b2c6b9ff07c04f9803b0d0888436bef",
+  "source_tag": "testflight/1.0-22",
+  "ipa_sha256": "1b3c846ca868387ee1845ee276acccc67370b3dafaa21d4030b7f986c85eed18",
+  "packaging": {
+    "archive_succeeded": true,
+    "upload_succeeded": true,
+    "signed_app_and_widget_app_groups_verified": true,
+    "matching_app_and_widget_build_numbers_verified": true,
+    "background_modes_and_task_identifiers_in_exact_ipa_verified": true,
+    "debug_activation_fixture_excluded": true,
+    "debug_sign_in_fixture_excluded": true,
+    "debug_keyboard_control_excluded": true,
+    "debug_health_fixture_excluded": true,
+    "sdk": "iphoneos26.5",
+    "privacy_manifests": 2,
+    "non_exempt_encryption": false
+  },
+  "build_id": "1954e3b2-1b35-466e-afff-107578fbf473",
+  "apple_status_checked_at_utc": "2026-11-05T12:15:10.477706+00:00",
+  "processing_state": "VALID",
+  "internal_testing_state": "IN_BETA_TESTING",
+  "internal_group_contains_build": true,
+  "external_testing_state": "IN_BETA_TESTING",
+  "external_group_contains_build": true,
+  "external_review": {
+    "state": "APPROVED",
+    "demo_review_instructions_applied": true,
+    "existing_external_tester_invitation_unchanged": true
+  },
+  "validation": {
+    "unit_tests_passed": 218,
+    "native_live_checks_passed": 1,
+    "test_cases_executed": 224,
+    "other_opt_in_live_tests_skipped": 5,
+    "native_ui_checks_passed": 5,
+    "native_ui_checks": [
+      "Failed/stale account warnings in cards, compact rows, tiles and above account readings; report action opens the composer",
+      "Largest accessibility font across accounts, display controls, chart readouts and settings",
+      "Lock Screen accessory layouts and VoiceOver labels",
+      "Notification controls and independent provider preferences persist",
+      "Overdue-usage notification delivered in Notification Centre while Requota was in the background"
+    ],
+    "test_runs": [
+      "223-case suite: 217 unit checks and one live Claude check passed; five other opt-in live tests skipped",
+      "Targeted nine-case usage-health suite passed after the quota-overshoot correction"
+    ],
+    "ios_version_checked": "26.5",
+    "screenshots_visually_checked": true,
+    "claude_protocol": {
+      "oauth_pkce_completed": true,
+      "existing_client_user_agent_usage_http": 200,
+      "current_cli_user_agent_usage_http": 200,
+      "profile_http": 200,
+      "native_identity_and_usage_check_passed": true,
+      "five_hour_absent_in_live_response": true,
+      "structured_weekly_limits_recognized": true
+    },
+    "regressions": [
+      "Quota overshoot remains readable as exhausted allowance",
+      "Structured Claude inventory takes precedence over obsolete compatibility fields",
+      "Empty or malformed usage cannot advance the last-success timestamp",
+      "Removed selected meters have a separate display-settings warning",
+      "Failed/stale states survive widget sanitization",
+      "Failure schemas remove values and hash unknown field names",
+      "Failure evidence survives ordinary diagnostic-log rotation",
+      "Missed-update reminders honor provider preferences and rearm after recovery"
+    ],
+    "reporting": {
+      "automatic_local_schema_capture": true,
+      "local_schema_retention_days": 30,
+      "maximum_distinct_schema_observations": 20,
+      "schema_excerpt_prefilled_in_report": true,
+      "automatic_upload": false,
+      "developer_reporting_backend_present": false
+    },
+    "investigation_limits": [
+      "No GitHub problem reports were present at investigation start. The affected iPhone debug bundle was not available; local diagnostics on that device cannot be inferred from the Mac.",
+      "The live account legacy weekly reading agreed with the structured record. Its exact previously frozen state was not reproduced; this build fixes independently reproduced compatibility and visibility failures.",
+      "Notification delivery was verified in the simulator; physical-device delivery cadence was not measured."
+    ]
+  },
+  "source_prs": [
+    "https://github.com/dotdioscorea/requota/pull/9",
+    "https://github.com/dotdioscorea/requota/pull/10"
+  ],
+  "privacy_policy_publication": {
+    "commit": "f74889ea80f8a3f8ebcd1e736c55b6831c69d8c0",
+    "url": "https://dotdioscorea.github.io/requota/"
+  },
+  "app_store_draft": {
+    "state": "PREPARE_FOR_SUBMISSION",
+    "selected_build": "22",
+    "release_type": "MANUAL",
+    "submitted_for_review": false,
+    "support_url": "https://github.com/dotdioscorea/requota/issues",
+    "privacy_policy_url": "https://dotdioscorea.github.io/requota/"
+  }
+}

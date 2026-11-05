@@ -1,10 +1,10 @@
 # Requota 1.0 release preparation
 
-Build **1.0 (21)** is available to the existing internal and external TestFlight groups. Apple approved external beta review. Its binary source is `fc427a7d29e43c32351e384aa166b32b22038954`, tagged `testflight/1.0-21`. [PR #7](https://github.com/dotdioscorea/requota/pull/7) improves accessibility text, Perplexity keyboard shortcuts and saved-account sign-in feedback. [Build 21 validation](../testflight-build-21.json) records the package, tests and distribution state. [PR #5](https://github.com/dotdioscorea/requota/pull/5), build 20, made activation per account; its live unused-week countdown check remains pending.
+Build **1.0 (22)** is available to the existing internal and external TestFlight groups. Apple approved external beta review. Its binary source is `1ee5a4445b2c6b9ff07c04f9803b0d0888436bef`, tagged `testflight/1.0-22`. [PR #9](https://github.com/dotdioscorea/requota/pull/9) updates Claude limits, account-health warnings and schema reporting; [PR #10](https://github.com/dotdioscorea/requota/pull/10) preserves quota-overshoot handling. [Build 22 validation](../testflight-build-22.json) records the package, tests, distribution state and limits of the historical diagnosis. [PR #5](https://github.com/dotdioscorea/requota/pull/5), build 20, made activation per account; its live unused-week countdown check remains pending.
 
 ## App Store Connect
 
-The [version draft](https://appstoreconnect.apple.com/apps/6818509879/distribution/ios/version/inflight) has build 21 selected and remains **Prepare for Submission**. No App Store review submission or public release was made. Release is set to **manual**.
+The [version draft](https://appstoreconnect.apple.com/apps/6818509879/distribution/ios/version/inflight) has build 22 selected and remains **Prepare for Submission**. No App Store review submission or public release was made. Release is set to **manual**.
 
 - English UK title, subtitle, description, promotional text, keywords, support URL and copyright are saved.
 - Six iPhone and five iPad screenshots finished processing, in the agreed order.
