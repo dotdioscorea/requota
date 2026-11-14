@@ -14,7 +14,7 @@ An iPhone and iPad app for monitoring multiple Codex, Claude, Grok, Gemini CLI, 
 - Display choices survive tier changes; known plan/allowance changes are recorded and start new analysis baselines.
 - Pull-to-refresh, timestamps, low-allowance/reset/expiry/unused-allowance notifications with provider overrides, and an observed events log.
 - Visible failed/stale account warnings in every layout and widget, with configurable missed-update notifications.
-- Automatic local capture of unreadable response schemas, with redacted excerpts prefilled in GitHub problem reports and an optional full debug bundle.
+- Automatic local capture of sign-in failures and unreadable response schemas, with redacted excerpts prefilled in GitHub problem reports and an optional full debug bundle.
 - Accessibility text sizes reflow accounts, charts and settings; usage values stay readable outside fixed-size rings.
 - Duplicate sign-in identifies the saved account and offers reconnect or another sign-in.
 

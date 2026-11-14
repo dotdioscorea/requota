@@ -3,7 +3,7 @@ import SwiftUI
 
 struct AccountEvent: Codable, Identifiable, Equatable {
     enum Kind: String, Codable, CaseIterable {
-        case weeklyReset, earlyReset, bankedDetected, bankedUsed, bankedExpired, bankedRemoved, parsingFailure, allowanceChanged, activationSent, windowStarted
+        case weeklyReset, earlyReset, bankedDetected, bankedUsed, bankedExpired, bankedRemoved, parsingFailure, signInFailed, allowanceChanged, activationSent, windowStarted
         var title: String {
             switch self {
             case .weeklyReset: return "Weekly reset"
@@ -13,6 +13,7 @@ struct AccountEvent: Codable, Identifiable, Equatable {
             case .bankedExpired: return "Banked reset expired"
             case .bankedRemoved: return "Banked reset removed"
             case .parsingFailure: return "Usage response changed"
+            case .signInFailed: return "Sign-in failed"
             case .allowanceChanged: return "Plan or allowance changed"
             case .activationSent: return "Activation request completed"
             case .windowStarted: return "Weekly window started"
@@ -24,7 +25,7 @@ struct AccountEvent: Codable, Identifiable, Equatable {
             case .bankedDetected: return "plus.circle"
             case .bankedUsed: return "checkmark.circle"
             case .bankedExpired, .bankedRemoved: return "minus.circle"
-            case .parsingFailure: return "exclamationmark.triangle"
+            case .parsingFailure, .signInFailed: return "exclamationmark.triangle"
             case .allowanceChanged: return "arrow.up.arrow.down"
             case .activationSent: return "paperplane"
             case .windowStarted: return "play.circle"

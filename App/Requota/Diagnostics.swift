@@ -2,10 +2,30 @@ import Foundation
 import CoreFoundation
 import UIKit
 
-enum DiagnosticStage: String, Codable { case signInStarted, identityVerified, usageVerified, signInFailed, refreshSucceeded, refreshFailed, refreshCycle, http, usageParsed, resetCompared, activationAttempted, activationCompleted, activationFailed }
+enum DiagnosticStage: String, Codable { case signInStarted, identityVerified, usageVerified, signInFailed, authenticationFailed, refreshSucceeded, refreshFailed, refreshCycle, http, usageParsed, resetCompared, activationAttempted, activationCompleted, activationFailed }
+struct AuthenticationDiagnostic: Codable, Equatable {
+    enum Step: String, Codable { case browser, authorization, token, identity }
+    enum OAuthCode: String, Codable {
+        case invalid_request, unauthorized_client, invalid_client, invalid_grant, invalid_scope, access_denied, server_error, temporarily_unavailable, unsupported_response_type
+        case invalid_refresh_token, token_expired, refresh_token_expired, refresh_token_invalidated, refresh_token_reused, other
+        static func recognize(_ value: String) -> Self { Self(rawValue: value) ?? .other }
+    }
+    var step: Step
+    var status: Int? = nil
+    var code: OAuthCode? = nil
+    var schema: ResponseSchema? = nil
+}
+struct AuthenticationFailure: LocalizedError {
+    var cause: Error
+    var diagnostic: AuthenticationDiagnostic
+    var errorDescription: String? {
+        diagnostic.step == .authorization ? "The provider rejected the sign-in request. Please report this problem." : cause.localizedDescription
+    }
+}
 enum DiagnosticFailure: String, Codable {
     case cancelled, timeout, callback, identity, signedOut, permission, throttled, response, accountMismatch, network, other
     static func category(_ error: Error) -> Self {
+        if let error = error as? AuthenticationFailure { return category(error.cause) }
         if let error = error as? ActivationPreparationFailure { return category(error.cause) }
         if let error = error as? ActivationError {
             switch error { case .permissionRequired: return .permission; case .incomplete, .allowanceUnknown: return .response; default: return .other }
@@ -54,6 +74,7 @@ struct DiagnosticEvent: Codable {
     // Local only; replaced with a bundle-local alias during export.
     var connection: String?
     var resets: ResetComparisonDiagnostic?
+    var authentication: AuthenticationDiagnostic?
 }
 struct ResetComparisonDiagnostic: Codable {
     var previousAvailable: Int?
@@ -206,7 +227,7 @@ struct UsageParsingDiagnostic: Codable {
     }
 }
 struct DebugBundle: Codable {
-    var schemaVersion = 6
+    var schemaVersion = 7
     var createdAt: Date
     var appVersion: String
     var systemVersion: String
@@ -258,8 +279,12 @@ enum Diagnostics {
     private static var failureLocation: URL { location.deletingLastPathComponent().appendingPathComponent("response-failures.json") }
     static func retainedFailures(_ events: [DiagnosticEvent], now: Date = .now) -> [DiagnosticEvent] {
         var seen = Set<String>()
-        return Array(events.filter { $0.date > now.addingTimeInterval(-30 * 86400) && $0.parsing?.responseSchema != nil }.sorted { $0.date > $1.date }.filter {
-            seen.insert(($0.provider?.rawValue ?? "") + ":" + ($0.connection ?? "") + ":" + ($0.parsing?.responseSchema?.fingerprint ?? "")).inserted
+        return Array(events.filter {
+            $0.date > now.addingTimeInterval(-30 * 86400) && ($0.parsing?.responseSchema != nil || $0.authentication != nil || ($0.stage == .signInFailed && $0.failure != .cancelled))
+        }.sorted { $0.date > $1.date }.filter {
+            let auth = $0.authentication
+            let key = [$0.provider?.rawValue ?? "", $0.connection ?? "", $0.stage.rawValue, $0.failure?.rawValue ?? "", $0.parsing?.responseSchema?.fingerprint ?? "", auth?.step.rawValue ?? "", auth?.code?.rawValue ?? "", auth?.status.map(String.init) ?? "", auth?.schema?.fingerprint ?? ""].joined(separator: ":")
+            return seen.insert(key).inserted
         }.prefix(20))
     }
     private static func failures() -> [DiagnosticEvent] {
@@ -270,16 +295,16 @@ enum Diagnostics {
     // Only typed fields are accepted. Never store URLs, HTTP bodies, error messages,
     // OAuth state, labels, email addresses or credentials. Local UUIDs are
     // retained for correlation and replaced with anonymous aliases in exports.
-    static func record(_ stage: DiagnosticStage, provider: Provider? = nil, status: Int? = nil, failure: DiagnosticFailure? = nil, privateSession: Bool? = nil, endpoint: DiagnosticEndpoint? = nil, parsing: UsageParsingDiagnostic? = nil, refresh: RefreshCycleDiagnostic? = nil, resets: ResetComparisonDiagnostic? = nil) {
+    static func record(_ stage: DiagnosticStage, provider: Provider? = nil, status: Int? = nil, failure: DiagnosticFailure? = nil, privateSession: Bool? = nil, endpoint: DiagnosticEndpoint? = nil, parsing: UsageParsingDiagnostic? = nil, refresh: RefreshCycleDiagnostic? = nil, resets: ResetComparisonDiagnostic? = nil, authentication: AuthenticationDiagnostic? = nil) {
         lock.lock(); defer { lock.unlock() }
         var events = load().filter { $0.date > Date.now.addingTimeInterval(-7 * 86400) }
-        let event = DiagnosticEvent(date: .now, provider: provider ?? context?.provider, stage: stage, status: status, endpoint: endpoint, failure: failure, privateSession: privateSession, parsing: parsing, refresh: refresh, connection: context?.accountID.uuidString, resets: resets)
-        if parsing?.responseSchema != nil {
+        let event = DiagnosticEvent(date: .now, provider: provider ?? context?.provider, stage: stage, status: status, endpoint: endpoint, failure: failure, privateSession: privateSession, parsing: parsing, refresh: refresh, connection: context?.accountID.uuidString, resets: resets, authentication: authentication)
+        if !retainedFailures([event]).isEmpty {
             let archive = retainedFailures(failures() + [event])
             try? FileManager.default.createDirectory(at: location.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? JSONEncoder().encode(archive).write(to: failureLocation, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
         }
-        var summary = event; summary.parsing?.responseSchema = nil
+        var summary = event; summary.parsing?.responseSchema = nil; summary.authentication?.schema = nil
         events.append(summary)
         events = Array(events.suffix(100))
         do {
@@ -363,11 +388,21 @@ enum Diagnostics {
         let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]; encoder.dateEncodingStrategy = .iso8601
         return try encoder.encode(bundle)
     }
-    @MainActor static func issueEvidence(accounts: [AgentAccount]) -> String {
+    @MainActor static func issueEvidence(accounts: [AgentAccount], connectionID: UUID? = nil) -> String {
         let bundle = bundle(accounts: accounts)
-        guard let failure = bundle.responseFailures?.first, let schema = failure.parsing?.responseSchema else { return "" }
+        let alias = connectionID.flatMap { id in accounts.firstIndex(where: { $0.id == id }).map { "account-\($0 + 1)" } }
+        let failures = (bundle.responseFailures ?? []).filter { alias == nil || $0.connection == alias }
+        guard let failure = failures.first else { return "" }
+        var evidence = "\n\nDiagnostic evidence\nProvider: \(failure.provider?.name ?? "Unknown")"
+        for event in failures.filter({ $0.connection == failure.connection && $0.provider == failure.provider }).prefix(4) {
+            evidence += "\nStage: \(event.stage.rawValue)" + (event.failure.map { ", failure: \($0.rawValue)" } ?? "")
+            if let auth = event.authentication {
+                evidence += ", step: \(auth.step.rawValue)" + (auth.code.map { ", OAuth code: \($0.rawValue)" } ?? "") + (auth.status.map { ", HTTP: \($0)" } ?? "")
+            }
+        }
+        guard let schema = failures.first(where: { $0.connection == failure.connection && ($0.parsing?.responseSchema != nil || $0.authentication?.schema != nil) }).flatMap({ $0.parsing?.responseSchema ?? $0.authentication?.schema }) else { return evidence }
         let fields = schema.fields.prefix(40).map { $0.path + ": " + $0.type.rawValue + ($0.discriminator.map { " (\($0))" } ?? "") }.joined(separator: "\n")
-        return "\n\nResponse schema (values removed)\nProvider: \(failure.provider?.name ?? "Unknown")\nFingerprint: \(schema.fingerprint)\n```text\n\(fields)\n```"
+        return evidence + "\n\nResponse schema (values removed)\nFingerprint: \(schema.fingerprint)\n```text\n\(fields)\n```"
     }
     static func export(_ data: Data) throws -> URL {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("RequotaReports")

@@ -66,7 +66,7 @@ final class SignInModel: ObservableObject {
                 Diagnostics.record(.usageVerified, provider: account.provider)
                 try Task.checkCancellation()
             } catch is CancellationError { credential = nil; snapshot = nil }
-            catch { snapshot = nil; message = error.localizedDescription; if case UsageError.invalidResponse = error { reportSuggested = true }; Diagnostics.record(.signInFailed, provider: account.provider, failure: .category(error)) }
+            catch { snapshot = nil; failed(error) }
           }
         }
     }
@@ -85,13 +85,13 @@ final class SignInModel: ObservableObject {
                     try Task.checkCancellation()
                     emailAttempt = attempt; inputEmail = attempt.email; awaitingEmailCode = true
                 } catch is CancellationError { }
-                catch { message = error.localizedDescription; Diagnostics.record(.signInFailed, failure: .category(error)) }
+                catch { failed(error) }
             }
         }
     }
     func verifyEmailCode(account: AgentAccount, previous: AccountCredential?) {
         guard !working, account.provider == .perplexity, let attempt = emailAttempt else { return }
-        working = true; message = nil; credential = nil; snapshot = nil
+        working = true; message = nil; reportSuggested = false; credential = nil; snapshot = nil
         let code = inputCode.trimmingCharacters(in: .whitespacesAndNewlines)
         task = Task {
             await Diagnostics.$context.withValue(.init(provider: .perplexity, accountID: account.id)) {
@@ -108,9 +108,7 @@ final class SignInModel: ObservableObject {
                     Diagnostics.record(.usageVerified)
                 } catch is CancellationError { credential = nil; snapshot = nil }
                 catch {
-                    message = error.localizedDescription
-                    if case UsageError.invalidResponse = error { reportSuggested = true }
-                    Diagnostics.record(.signInFailed, failure: .category(error))
+                    failed(error)
                 }
             }
         }
@@ -127,12 +125,16 @@ final class SignInModel: ObservableObject {
                     Diagnostics.record(.usageVerified)
                 } catch is CancellationError { self.credential = nil; snapshot = nil }
                 catch {
-                    message = error.localizedDescription
-                    if case UsageError.invalidResponse = error { reportSuggested = true }
-                    Diagnostics.record(.signInFailed, failure: .category(error))
+                    failed(error)
                 }
             }
         }
+    }
+    private func failed(_ error: Error) {
+        message = error.localizedDescription
+        let category = DiagnosticFailure.category(error)
+        reportSuggested = ![.cancelled, .timeout, .accountMismatch].contains(category)
+        Diagnostics.record(.signInFailed, failure: category, authentication: (error as? AuthenticationFailure)?.diagnostic)
     }
     func changeEmail() { guard !working else { return }; emailAttempt = nil; inputCode = ""; awaitingEmailCode = false; message = nil }
     func clearEmailIdentity() {
@@ -161,7 +163,7 @@ struct SignInView: View {
     init(account: AgentAccount, allowActivation: Bool = false, onConnected: ((UUID) -> Void)? = nil) {
         self.account = account; self.allowActivation = allowActivation; self.onConnected = onConnected
         #if DEBUG && targetEnvironment(simulator)
-        _model = StateObject(wrappedValue: SignInUIFixture.enabled && account.provider == .claude ? SignInUIFixture.model() : SignInModel())
+        _model = StateObject(wrappedValue: SignInUIFixture.rejectionEnabled && account.provider == .codex ? SignInUIFixture.rejectedModel() : SignInUIFixture.enabled && account.provider == .claude ? SignInUIFixture.model() : SignInModel())
         #else
         _model = StateObject(wrappedValue: SignInModel())
         #endif
@@ -319,7 +321,8 @@ struct SignInView: View {
                     }
                 }
                 .onDisappear { model.cancel() }
-        }.interactiveDismissDisabled(model.working).sheet(isPresented: $reporting) { NavigationStack { ProblemReportView(title: "\(account.provider.name) sign-in response could not be parsed", includeDebug: true).toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { reporting = false } } } } }
+                .onChange(of: model.reportSuggested) { _, suggested in if suggested { store.recordSignInFailure(account.id) } }
+        }.interactiveDismissDisabled(model.working).sheet(isPresented: $reporting) { NavigationStack { ProblemReportView(title: "\(account.provider.name) sign-in failed", includeDebug: true, connectionID: account.id).toolbar { ToolbarItem(placement: .cancellationAction) { Button("Done") { reporting = false } } } } }
     }
     private func chooseAnotherAccount() {
         if account.provider == .perplexity { model.clearEmailIdentity(); emailLocked = false }

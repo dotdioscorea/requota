@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0288D313EB0B61AC1529F92B /* CodexLiveTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8907E0EABABEDFD753BA13E7 /* CodexLiveTests.swift */; };
 		035F2BC6D381A05E8F301E3E /* KimiAuth.swift in Sources */ = {isa = PBXBuildFile; fileRef = 798E408F0CD87782A81FAC9F /* KimiAuth.swift */; };
 		0829CA8FF0FE798328E32766 /* AccessoryPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 13CDBA27487F9AEB7E58F493 /* AccessoryPreview.swift */; };
 		0B66A525DBDE7609D4C92A11 /* AccountHealth.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBB2B725B3BD187F2E01F928 /* AccountHealth.swift */; };
@@ -235,6 +236,7 @@
 		87E4F6A25393C07AACF2DFCD /* RequotaUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = RequotaUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		882D0A075ED384E0C4819099 /* AmpTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmpTests.swift; sourceTree = "<group>"; };
 		88F2E2065A61026D721B77A3 /* LockScreenWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LockScreenWidget.swift; sourceTree = "<group>"; };
+		8907E0EABABEDFD753BA13E7 /* CodexLiveTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexLiveTests.swift; sourceTree = "<group>"; };
 		937CE21AC0549FDFA1103E86 /* UsageHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageHistory.swift; sourceTree = "<group>"; };
 		9733C9297C58A71AEE993574 /* SignInTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignInTests.swift; sourceTree = "<group>"; };
 		9A1A94056C750394175DD119 /* AmpAuth.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmpAuth.swift; sourceTree = "<group>"; };
@@ -305,6 +307,7 @@
 				9D273D4CE1143B84863C3713 /* ClaudeLiveTests.swift */,
 				54B5F06EC60E18E8F38A77E3 /* ClaudeResetTests.swift */,
 				779901A2616DE6B747F0DCD2 /* ClineTests.swift */,
+				8907E0EABABEDFD753BA13E7 /* CodexLiveTests.swift */,
 				C5BDDDE58EC5DE83D417C0D2 /* CredentialVaultTests.swift */,
 				B257E73512B04BDB455E0564 /* CreditTextTests.swift */,
 				3BF1DFBC61871AB102EA0788 /* DemoTests.swift */,
@@ -627,6 +630,7 @@
 				6841ABD21B996B8271B6B5B2 /* ClaudeLiveTests.swift in Sources */,
 				AAB516B324E9AB269F94BE41 /* ClaudeResetTests.swift in Sources */,
 				8E357DFDB00BD740E5B5E760 /* ClineTests.swift in Sources */,
+				0288D313EB0B61AC1529F92B /* CodexLiveTests.swift in Sources */,
 				A1FE0C1A38FB90960E0C82E1 /* CredentialVaultTests.swift in Sources */,
 				B7BDB93210559DF2D1FFA928 /* CreditTextTests.swift in Sources */,
 				4DB9CC64C461EBAB5C6DF018 /* DemoTests.swift in Sources */,

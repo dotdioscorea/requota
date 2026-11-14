@@ -103,6 +103,53 @@ final class AuthenticationTests: XCTestCase {
         let items = URLComponents(url: attempt.authorizationURL, resolvingAgainstBaseURL: false)!.queryItems!
         XCTAssertNil(items.first { $0.name == "agent_name_hint" })
     }
+    func testNativeCodexReconnectDoesNotSendRejectedIDTokenHint() throws {
+        var previous = Fixture.credential("returning")
+        previous.clientID = OpenAIAuth.codexClientID; previous.idToken = "private-saved-id-token"
+        let attempt = try OAuthAttempt(redirectURI: callback, hostID: "fixture", previous: previous)
+        let items = URLComponents(url: attempt.authorizationURL, resolvingAgainstBaseURL: false)!.queryItems!
+        XCTAssertNil(items.first { $0.name == "id_token_hint" })
+        XCTAssertFalse(attempt.authorizationURL.absoluteString.contains(previous.idToken!))
+        XCTAssertEqual(attempt.previous, previous)
+        XCTAssertEqual(items.first { $0.name == "nonce" }?.value, attempt.nonce)
+        XCTAssertEqual(items.first { $0.name == "state" }?.value, attempt.state)
+        previous.clientID = "oaiapp_fixture"
+        let legacy = try OAuthAttempt(redirectURI: callback, hostID: "fixture", previous: previous)
+        XCTAssertTrue(legacy.authorizationURL.absoluteString.contains("id_token_hint="))
+    }
+    func testProviderRejectionReturnsToAppAndIsNotUserCancellation() throws {
+        let attempt = try OAuthAttempt(redirectURI: callback, hostID: "fixture")
+        let target = "/auth/callback?state=\(attempt.state)&error=invalid_request&error_description=private-server-description"
+        let reply = try LoopbackRequest.reply(method: "GET", target: target, headers: [:], attempt: attempt)
+        XCTAssertFalse(reply.preflight)
+        XCTAssertThrowsError(try attempt.validateCallback(reply.callback!)) { error in
+            XCTAssertEqual((error as? AuthenticationFailure)?.diagnostic.code, .invalid_request)
+            XCTAssertEqual(DiagnosticFailure.category(error), .callback)
+            XCTAssertFalse(error.localizedDescription.contains("cancelled"))
+            XCTAssertFalse(error.localizedDescription.contains("private-server-description"))
+        }
+        XCTAssertThrowsError(try attempt.validateCallback(URL(string: callback.absoluteString + "?state=\(attempt.state)&error=access_denied")!)) { error in
+            XCTAssertEqual(DiagnosticFailure.category(error), .cancelled)
+        }
+        for invalid in [target + "&code=ambiguous", target + "&error=access_denied", target.replacingOccurrences(of: attempt.state, with: "wrong"), target + "&client_id=foreign"] {
+            XCTAssertThrowsError(try LoopbackRequest.reply(method: "GET", target: invalid, headers: [:], attempt: attempt))
+        }
+    }
+    @MainActor func testTokenFailureRecordsSafeContractEvidenceAndPreservesRefreshError() throws {
+        Diagnostics.clear(); defer { Diagnostics.clear() }
+        let raw = ["error": ["code": "refresh_token_reused", "message": "private-provider-text"], "refresh_token": "private-token"] as [String: Any]
+        let bytes = try JSONSerialization.data(withJSONObject: raw)
+        XCTAssertThrowsError(try OpenAIAuth.decodeToken(bytes, status: 401, refreshing: true)) { error in
+            XCTAssertEqual(DiagnosticFailure.category(error), .signedOut)
+        }
+        let bundle = Diagnostics.bundle(accounts: [])
+        XCTAssertEqual(bundle.responseFailures?.first?.authentication?.code, .refresh_token_reused)
+        let output = String(decoding: try Diagnostics.encode(bundle), as: UTF8.self)
+        XCTAssertTrue(output.contains("$.refresh_token"))
+        XCTAssertFalse(output.contains("private-token")); XCTAssertFalse(output.contains("private-provider-text"))
+        XCTAssertThrowsError(try OpenAIAuth.decodeToken(Data("<html>private</html>".utf8), status: 502, refreshing: false))
+        XCTAssertEqual(Diagnostics.bundle(accounts: []).responseFailures?.first?.authentication?.status, 502)
+    }
     func testIdentityClaimsRejectWrongIssuerAudienceNonceAndExpiry() throws {
         let now = Date(timeIntervalSince1970: 1790931600)
         let good: [String: Any] = ["iss": OpenAIAuth.issuer, "aud": "oaiapp_fixture", "sub": "fixture-subject", "iat": now.timeIntervalSince1970, "exp": now.addingTimeInterval(3600).timeIntervalSince1970, "nonce": "fixture-nonce"]

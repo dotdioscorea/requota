@@ -60,7 +60,7 @@ struct ChartEventGroup: Identifiable {
 enum ChartEvents {
     static func groups(events: [AccountEvent], windows: [UsageWindow], domain: ClosedRange<Date>) -> [ChartEventGroup] {
         let relevant = events.filter { event in
-            guard domain.contains(event.date), event.kind != .parsingFailure else { return false }
+            guard domain.contains(event.date), event.kind != .parsingFailure, event.kind != .signInFailed else { return false }
             if let id = event.windowID { return windows.contains { $0.id == id } }
             if let title = event.window { return windows.contains { $0.title == title } }
             return !windows.isEmpty

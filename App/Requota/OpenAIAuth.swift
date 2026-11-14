@@ -78,7 +78,9 @@ struct OAuthAttempt {
         } else {
             items += [URLQueryItem(name: "id_token_add_organizations", value: "true"), URLQueryItem(name: "codex_cli_simplified_flow", value: "true"), URLQueryItem(name: "originator", value: "requota")]
         }
-        if let hint = previous?.idToken { items.append(URLQueryItem(name: "id_token_hint", value: hint)) }
+        // The native Codex registration rejects ID-token hints with invalid_request.
+        // Account matching still happens against the verified identity after exchange.
+        if legacyRegistration, let hint = previous?.idToken { items.append(URLQueryItem(name: "id_token_hint", value: hint)) }
         parts.queryItems = items
         return parts.url!
     }
@@ -88,12 +90,19 @@ struct OAuthAttempt {
               let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems,
               items.filter({ $0.name == "state" }).count == 1,
               items.first(where: { $0.name == "state" })?.value == state else { throw AuthError.invalidCallback }
-        if items.contains(where: { $0.name == "error" }) { throw AuthError.cancelled }
-        guard items.filter({ $0.name == "code" }).count == 1,
-              let code = items.first(where: { $0.name == "code" })?.value, !code.isEmpty,
-              items.filter({ $0.name == "client_id" }).count <= 1 else { throw AuthError.invalidCallback }
         let returned = items.first(where: { $0.name == "client_id" })?.value
-        guard returned == nil || returned == clientID else { throw AuthError.invalidCallback }
+        guard items.filter({ $0.name == "client_id" }).count <= 1,
+              returned == nil || returned == clientID else { throw AuthError.invalidCallback }
+        if items.contains(where: { $0.name == "error" }) {
+            guard items.filter({ $0.name == "error" }).count == 1,
+                  !items.contains(where: { $0.name == "code" }),
+                  let error = items.first(where: { $0.name == "error" })?.value, !error.isEmpty else { throw AuthError.invalidCallback }
+            let code = AuthenticationDiagnostic.OAuthCode.recognize(error)
+            if code == .access_denied { throw AuthError.cancelled }
+            throw AuthenticationFailure(cause: AuthError.invalidCallback, diagnostic: .init(step: .authorization, code: code))
+        }
+        guard items.filter({ $0.name == "code" }).count == 1,
+              let code = items.first(where: { $0.name == "code" })?.value, !code.isEmpty else { throw AuthError.invalidCallback }
         return (code, clientID)
     }
 }
@@ -117,14 +126,19 @@ enum OpenAIAuth {
         ]
         if result.clientID.hasPrefix("oaiapp_") { fields["resource"] = "https://api.openai.com/v1" }
         let raw = try await tokenRequest(fields)
-        guard let idToken = raw["id_token"] as? String else { throw AuthError.invalidIdentity }
-        let claims = try await identity(idToken: idToken, clientID: result.clientID, nonce: attempt.nonce)
-        let subject = claims["sub"] as! String
-        let accountID = (claims["https://api.openai.com/auth"] as? [String: Any])?["chatgpt_account_id"] as? String
-        if let previous = attempt.previous {
-            guard subject == previous.subject, accountID == previous.accountID else { throw UsageError.wrongAccount }
+        do {
+            guard let idToken = raw["id_token"] as? String else { throw AuthError.invalidIdentity }
+            let claims = try await identity(idToken: idToken, clientID: result.clientID, nonce: attempt.nonce)
+            let subject = claims["sub"] as! String
+            let accountID = (claims["https://api.openai.com/auth"] as? [String: Any])?["chatgpt_account_id"] as? String
+            if let previous = attempt.previous {
+                guard subject == previous.subject, accountID == previous.accountID else { throw UsageError.wrongAccount }
+            }
+            return try credential(raw, previous: attempt.previous, clientID: result.clientID, subject: subject, accountID: accountID, hostID: attempt.hostID, email: claims["email"] as? String)
+        } catch {
+            Diagnostics.record(.authenticationFailed, failure: .category(error), authentication: .init(step: .identity, schema: .capture(raw)))
+            throw error
         }
-        return try credential(raw, previous: attempt.previous, clientID: result.clientID, subject: subject, accountID: accountID, hostID: attempt.hostID, email: claims["email"] as? String)
     }
     static func refresh(_ previous: AccountCredential) async throws -> AccountCredential {
         guard previous.provider == .codex, previous.issuer == issuer,
@@ -163,11 +177,22 @@ enum OpenAIAuth {
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.httpBody = form(fields)
         let (data, response) = try await ProviderHTTP.data(request)
-        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw AuthError.unavailable }
-        guard (200..<300).contains(response.statusCode) else {
+        return try decodeToken(data, status: response.statusCode, refreshing: fields["grant_type"] == "refresh_token")
+    }
+    static func decodeToken(_ data: Data, status: Int, refreshing: Bool) throws -> [String: Any] {
+        let value = try? JSONSerialization.jsonObject(with: data, options: .fragmentsAllowed)
+        let object = value as? [String: Any]
+        let code = object.flatMap { ($0["error"] as? String) ?? ($0["error"] as? [String: Any])?["code"] as? String }.map(AuthenticationDiagnostic.OAuthCode.recognize)
+        let diagnostic = AuthenticationDiagnostic(step: .token, status: status, code: code, schema: value.map(ResponseSchema.capture))
+        guard let object else {
+            Diagnostics.record(.authenticationFailed, failure: .response, authentication: diagnostic)
+            throw AuthError.unavailable
+        }
+        guard (200..<300).contains(status) else {
+            Diagnostics.record(.authenticationFailed, failure: .response, authentication: diagnostic)
             let unusable = ["invalid_grant", "invalid_refresh_token", "token_expired", "refresh_token_expired", "refresh_token_invalidated", "refresh_token_reused"]
-            if let code = object["error"] as? String, unusable.contains(code) {
-                if fields["grant_type"] == "refresh_token" { throw UsageError.signedOut }
+            if let code = code?.rawValue, unusable.contains(code) {
+                if refreshing { throw UsageError.signedOut }
                 throw AuthError.invalidCallback
             }
             throw AuthError.unavailable
@@ -303,8 +328,10 @@ final class OAuthBrowser: NSObject, ASWebAuthenticationPresentationContextProvid
                         let redirect = URL(string: "http://\(host):\(port.rawValue)\(path)")!
                         let attempt = try OAuthAttempt(redirectURI: redirect, hostID: OpenAIAuth.hostID, previous: previous, provider: provider, allowActivation: allowActivation)
                         self.attempt = attempt
-                        let session = ASWebAuthenticationSession(url: attempt.authorizationURL, callbackURLScheme: nil) { [weak self] _, _ in
-                            Task { @MainActor in self?.finish(.failure(AuthError.cancelled)) }
+                        let session = ASWebAuthenticationSession(url: attempt.authorizationURL, callbackURLScheme: nil) { [weak self] _, error in
+                            let failure: Error = (error as? ASWebAuthenticationSessionError)?.code == .canceledLogin
+                                ? AuthError.cancelled : AuthenticationFailure(cause: AuthError.unavailable, diagnostic: .init(step: .browser))
+                            Task { @MainActor in self?.finish(.failure(failure)) }
                         }
                         // Reuse system sign-in cookies by default. A separate login is
                         // available when the user explicitly chooses another account.
@@ -351,6 +378,7 @@ final class OAuthBrowser: NSObject, ASWebAuthenticationPresentationContextProvid
                     let result: Result<URL, Error>
                     do { _ = try attempt.validateCallback(url); result = .success(url) }
                     catch AuthError.cancelled { result = .failure(AuthError.cancelled) }
+                    catch let error as AuthenticationFailure { result = .failure(error) }
                     catch { connection.cancel(); return }
                     connection.send(content: Data(reply.response.utf8), completion: .contentProcessed { _ in connection.cancel() })
                     self.finish(result)

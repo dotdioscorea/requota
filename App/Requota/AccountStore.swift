@@ -509,6 +509,11 @@ final class AccountStore: ObservableObject {
         guard loadedEvents else { return }
         do { try eventFile.write(events) } catch { self.error = "Events could not be saved." }
     }
+    func recordSignInFailure(_ id: UUID, now: Date = .now) {
+        guard !isDemo, accounts.contains(where: { $0.id == id }),
+              !events.contains(where: { $0.accountID == id && $0.kind == .signInFailed && $0.detectedAt > now.addingTimeInterval(-60) }) else { return }
+        appendEvents([AccountEvent(id: "\(id):sign-in:\(now.timeIntervalSince1970)", accountID: id, kind: .signInFailed, date: now, detectedAt: now)])
+    }
     private func appendEvents(_ additions: [AccountEvent]) {
         guard loadedEvents else { return }
         let ids = Set(events.map(\.id))

@@ -721,7 +721,7 @@ final class RequotaUITests: XCTestCase {
     }
     func testSystemAuthenticationPresentation() {
         let app = XCUIApplication(); app.launch()
-        app.buttons["connect-first"].tap(); app.buttons["connect-codex"].tap()
+        app.buttons["add-account"].tap(); app.buttons["connect-codex"].tap()
         let service = XCUIApplication(bundleIdentifier: "com.apple.SafariViewService")
         for button in ["Continue with ChatGPT", "choose-another-login"] {
             app.buttons[button].tap()
@@ -736,8 +736,22 @@ final class RequotaUITests: XCTestCase {
             XCTAssertTrue(app.staticTexts["Sign-in was cancelled. Your saved accounts are unchanged."].waitForExistence(timeout: 5))
         }
         app.buttons["Cancel"].tap(); app.buttons["Done"].tap()
-        XCTAssertTrue(app.buttons["connect-first"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["add-account"].waitForExistence(timeout: 5))
         // This verifies presentation and cancellation; real authorization is a separate release check.
+    }
+    func testRejectedCodexSignInOffersReportWithAutomaticEvidence() {
+        let app = XCUIApplication(); app.launchArguments = ["--ui-fixture", "--exit-demo-test", "--signin-rejection-fixture"]; app.launch()
+        app.buttons["add-account"].tap(); app.buttons["connect-codex"].tap()
+        app.buttons["Continue with ChatGPT"].tap()
+        XCTAssertTrue(app.staticTexts["The provider rejected the sign-in request. Please report this problem."].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["save-connection"].exists)
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "Provider rejection and report action"; shot.lifetime = .keepAlways; add(shot)
+        app.buttons["Report problem"].tap()
+        XCTAssertTrue(app.navigationBars["Report a problem"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.textFields["Problem summary"].value as? String == "Codex sign-in failed")
+        XCTAssertTrue(app.buttons["Open GitHub issue"].exists)
+        app.buttons["View debug bundle"].tap()
+        XCTAssertTrue(app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "invalid_request")).firstMatch.waitForExistence(timeout: 5))
     }
     func testClaudeAndGrokPresentProviderLoginPages() {
         let app = XCUIApplication(); app.launch()

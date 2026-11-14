@@ -169,7 +169,9 @@ enum LoopbackRequest {
             return LoopbackReply(preflight: true, callback: nil, response: "HTTP/1.1 204 No Content\r\n\(cors)Content-Length: 0\r\nConnection: close\r\n\r\n")
         }
         guard method == "GET" else { throw AuthError.invalidCallback }
-        do { _ = try attempt.validateCallback(url) } catch AuthError.cancelled { /* Validated denial returns to the app. */ }
+        do { _ = try attempt.validateCallback(url) }
+        catch AuthError.cancelled { /* Validated denial returns to the app. */ }
+        catch is AuthenticationFailure { /* Validated provider rejection also returns to the app. */ }
         let body = "<!doctype html><meta name=viewport content='width=device-width'><title>Requota</title><p>You can return to Requota.</p>"
         return LoopbackReply(preflight: false, callback: url, response: "HTTP/1.1 200 OK\r\n\(cors)Content-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\nContent-Security-Policy: default-src 'none'\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n\(body)")
     }

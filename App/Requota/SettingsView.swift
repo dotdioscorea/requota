@@ -79,7 +79,7 @@ struct PrivacyView: View {
                 Text("Removing an account deletes its local tokens and saved data.")
             }
             Section {
-                Text("Diagnostics stay on this device: recent events for seven days and unreadable response schemas for 30 days. Schemas contain field types, without response values or account identities. Nothing is sent automatically.")
+                Text("Diagnostics stay on this device: recent events for seven days; sign-in failures and unreadable response schemas for 30 days. Schemas contain field types, without response values or account identities. Nothing is sent automatically.")
                 Button(cleared ? "Diagnostics cleared" : "Clear diagnostics") { Diagnostics.clear(); cleared = true }.disabled(cleared)
             }
             Section {
@@ -90,6 +90,7 @@ struct PrivacyView: View {
     }
 }
 struct ProblemReportView: View {
+    private let connectionID: UUID?
     @EnvironmentObject private var store: AccountStore
     @Environment(\.openURL) private var openURL
     @State private var title: String
@@ -98,7 +99,8 @@ struct ProblemReportView: View {
     @State private var debugFile: URL?
     @State private var debugText = ""
     @State private var exportError: String?
-    init(title: String = "", details: String = "", includeDebug: Bool = false) {
+    init(title: String = "", details: String = "", includeDebug: Bool = false, connectionID: UUID? = nil) {
+        self.connectionID = connectionID
         _title = State(initialValue: title); _details = State(initialValue: details); _includeDebug = State(initialValue: includeDebug)
     }
     var body: some View {
@@ -131,7 +133,7 @@ struct ProblemReportView: View {
     }
     private func openIssue() {
         var url = URLComponents(string: "https://github.com/dotdioscorea/requota/issues/new")!
-        let evidence = includeDebug ? Diagnostics.issueEvidence(accounts: store.accounts) : ""
+        let evidence = includeDebug ? Diagnostics.issueEvidence(accounts: store.accounts, connectionID: connectionID) : ""
         let body = String(details.prefix(6000)) + "\n\nApp: \(Diagnostics.version)\niOS: \(UIDevice.current.systemVersion)" + evidence + (includeDebug ? "\n\nFull debug bundle: requota-debug.json (optional attachment)." : "")
         url.queryItems = [URLQueryItem(name: "title", value: String(title.prefix(160))), URLQueryItem(name: "body", value: body)]
         if let url = url.url { openURL(url) }
