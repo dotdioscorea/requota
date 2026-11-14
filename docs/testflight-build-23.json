@@ -1,0 +1,99 @@
+{
+  "product": "Requota",
+  "version": "1.0",
+  "build": "23",
+  "source_commit": "88326c6c133f849f53099984aa3250c1a5df9bdd",
+  "source_tag": "testflight/1.0-23",
+  "ipa_sha256": "b289fec57444abaf2ec054e69ff01e154e7d83e9a4c55527cbd052ba3ae95541",
+  "packaging": {
+    "archive_succeeded": true,
+    "upload_succeeded": true,
+    "signed_app_and_widget_app_groups_verified": true,
+    "matching_app_and_widget_build_numbers_verified": true,
+    "background_modes_and_task_identifiers_in_exact_ipa_verified": true,
+    "debug_activation_fixture_excluded": true,
+    "debug_sign_in_fixture_excluded": true,
+    "debug_keyboard_control_excluded": true,
+    "debug_health_fixture_excluded": true,
+    "debug_sign_in_rejection_fixture_excluded": true,
+    "temporary_authorization_bridge_excluded": true,
+    "sdk": "iphoneos26.5",
+    "privacy_manifests": 2,
+    "non_exempt_encryption": false
+  },
+  "build_id": "f2a72ce5-eef4-49ec-a6f9-f9e88bf7afe6",
+  "apple_status_checked_at_utc": "2026-11-14T11:43:39.093277+00:00",
+  "processing_state": "VALID",
+  "internal_testing_state": "IN_BETA_TESTING",
+  "internal_group_contains_build": true,
+  "external_testing_state": "IN_BETA_TESTING",
+  "external_group_contains_build": true,
+  "external_review": {
+    "state": "APPROVED",
+    "demo_review_instructions_applied": true,
+    "existing_external_tester_invitation_unchanged": true
+  },
+  "validation": {
+    "unit_tests_passed": 224,
+    "native_live_checks_passed": 1,
+    "test_cases_executed": 231,
+    "other_opt_in_live_tests_skipped": 6,
+    "native_ui_checks_passed": 3,
+    "native_ui_checks": [
+      "Codex system-browser presentation and cancellation for both login options",
+      "Provider rejection and report composer with automatically retained evidence",
+      "Duplicate Claude connection identifies and reconnects the saved account"
+    ],
+    "ios_version_checked": "26.5",
+    "rejection_screen_visually_checked": true,
+    "codex_protocol": {
+      "fresh_pkce_authorization_completed": true,
+      "old_reconnect_id_hint_rejection_reproduced": true,
+      "fixed_reconnect_completed": true,
+      "native_verified_identity_matched_saved_account": true,
+      "token_http": 200,
+      "identity_keys_http": 200,
+      "usage_http": 200,
+      "banked_reset_http": 200,
+      "native_connection_saved": true,
+      "cli_tokens_rotated": false
+    },
+    "regressions": [
+      "No ID-token hint for the native Codex client",
+      "OAuth rejection differs from user cancellation",
+      "Ambiguous or forged callbacks cannot consume login",
+      "Typed nested token errors preserve signed-out handling",
+      "Sign-in failures survive ordinary diagnostic-log rotation",
+      "Redacted OAuth evidence is prefilled in reports",
+      "Reconnect failure events do not replace credentials or readings"
+    ],
+    "reporting": {
+      "automatic_local_failure_capture": true,
+      "local_retention_days": 30,
+      "maximum_distinct_observations": 20,
+      "redacted_evidence_prefilled_in_report": true,
+      "automatic_upload": false
+    },
+    "investigation_limits": [
+      "No GitHub problem reports or submitted debug bundles were available; the affected iPhone logs were unavailable.",
+      "Authorization used an existing Chrome identity for the native simulator OAuth attempt; native callback, token exchange, identity, usage and persistence completed in Requota. The temporary local test bridge was removed before commit.",
+      "Physical-device testing and other providers live sign-in were not repeated."
+    ]
+  },
+  "investigation_notes": "docs/codex-signin-fix-2026-11-14.md",
+  "source_prs": [
+    "https://github.com/dotdioscorea/requota/pull/12"
+  ],
+  "privacy_policy_publication": {
+    "url": "https://dotdioscorea.github.io/requota/",
+    "http_status": 200,
+    "expanded_signin_diagnostics_visible": true,
+    "source_commit": "855bf56f9e76c227619f118d2982a92f15bebd38"
+  },
+  "app_store_draft": {
+    "state": "PREPARE_FOR_SUBMISSION",
+    "selected_build": "23",
+    "release_type": "MANUAL",
+    "submitted_for_review": false
+  }
+}
