@@ -10,6 +10,17 @@ final class MemoryVault: CredentialStorage {
 
 @MainActor
 final class AccountStoreTests: XCTestCase {
+    func testReconnectFailureRecordsEventWithoutChangingSavedCredentialsOrReadings() throws {
+        let vault = MemoryVault(); let store = store(vault: vault)
+        let credential = Fixture.credential("account"); let account = Fixture.account(credential)
+        try store.connect(account, credential: credential)
+        store.recordSignInFailure(account.id); store.recordSignInFailure(account.id); store.recordSignInFailure(UUID())
+        XCTAssertEqual(store.events.filter { $0.kind == .signInFailed }.count, 1)
+        XCTAssertEqual(store.accounts[0].snapshot, account.snapshot)
+        XCTAssertEqual(vault.values[account.id], credential)
+        XCTAssertFalse(store.accounts[0].needsLogin)
+        XCTAssertEqual(self.store(vault: vault).events.filter { $0.kind == .signInFailed }.count, 1)
+    }
     func testPerplexityRefreshRenewsAndPersistsItsSessionBeforeAUsageFailure() async throws {
         let vault = MemoryVault()
         let old = try PerplexityAuth.validated(["user": ["id": "account-a", "email": "person@example.test"], "expires": Date.now.addingTimeInterval(30 * 86400).ISO8601Format()], token: "header..iv.ciphertext.tag", previous: nil, expectedEmail: nil, hostID: "host")

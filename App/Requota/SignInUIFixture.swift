@@ -4,6 +4,10 @@ import Foundation
 // Simulator-only sign-in responses; no requests or real credentials.
 @MainActor enum SignInUIFixture {
     static var enabled: Bool { SimulatorFixtures.enabled && ProcessInfo.processInfo.arguments.contains("--signin-fixture") }
+    static var rejectionEnabled: Bool { SimulatorFixtures.enabled && ProcessInfo.processInfo.arguments.contains("--signin-rejection-fixture") }
+    static func rejectedModel() -> SignInModel {
+        SignInModel(signer: { _ in throw AuthenticationFailure(cause: AuthError.invalidCallback, diagnostic: .init(step: .authorization, code: .invalid_request)) })
+    }
     static let existingID = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
     static func credential(_ selectedID: UUID? = nil) -> AccountCredential {
         let id = selectedID ?? existingID

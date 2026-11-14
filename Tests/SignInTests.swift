@@ -3,6 +3,30 @@ import XCTest
 
 @MainActor
 final class SignInTests: XCTestCase {
+    func testRejectedAuthorizationSuggestsReportAndSurvivesSuccessfulPolling() async throws {
+        Diagnostics.clear(); defer { Diagnostics.clear() }
+        let account = AgentAccount(provider: .codex)
+        let model = SignInModel(signer: { _ in
+            throw AuthenticationFailure(cause: AuthError.invalidCallback, diagnostic: .init(step: .authorization, code: .invalid_request))
+        })
+        model.start(account: account, previous: nil)
+        await fulfillment(of: [XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in !model.working }, object: nil)], timeout: 3)
+        XCTAssertTrue(model.reportSuggested); XCTAssertNil(model.credential); XCTAssertNil(model.snapshot)
+        for _ in 0..<110 { Diagnostics.record(.http, provider: .codex, status: 200, endpoint: .usage) }
+        let bundle = Diagnostics.bundle(accounts: [])
+        XCTAssertEqual(bundle.responseFailures?.first?.provider, .codex)
+        XCTAssertEqual(bundle.responseFailures?.first?.authentication?.code, .invalid_request)
+        XCTAssertTrue(bundle.responseFailures!.first!.connection!.hasPrefix("connection-"))
+        XCTAssertTrue(Diagnostics.issueEvidence(accounts: []).contains("OAuth code: invalid_request"))
+    }
+    func testExpectedCancellationAndDifferentAccountDoNotSuggestBugReport() async {
+        for error in [AuthError.cancelled as Error, UsageError.wrongAccount, AuthError.timedOut] {
+            let model = SignInModel(signer: { _ in throw error })
+            model.start(account: AgentAccount(provider: .codex), previous: nil)
+            await fulfillment(of: [XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in !model.working }, object: nil)], timeout: 3)
+            XCTAssertFalse(model.reportSuggested)
+        }
+    }
     func testChoosingAnotherEmailAfterVerificationDiscardsThePreviousIdentity() async {
         var connection = Fixture.credential("perplexity"); connection.provider = .perplexity
         let account = AgentAccount(provider: .perplexity)
